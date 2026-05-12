@@ -31,6 +31,16 @@ python -c "import torch; print('torch', torch.__version__); print('cuda', torch.
 
 ## 2. 进入项目目录
 
+**若尚未克隆仓库：**
+
+```bash
+git clone https://github.com/<你的用户名>/Street_Character_Recognition.git
+export PROJECT=~/Street_Character_Recognition   # 与 clone 目录一致
+cd "$PROJECT"
+```
+
+**已有代码时：**
+
 ```bash
 export PROJECT=~/Street_Character_Recognition   # 改成你的路径
 cd "$PROJECT"
@@ -52,9 +62,61 @@ pip install -r requirements-yolo.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
 
 ---
 
+## 3.5 从 Git 克隆后复原 `dataset/` 与 `*.pt`
+
+通过 **`git clone`** 拉到的通常只有代码：仓库 **不包含** `dataset/`、**`*.pt`**、`runs/` 等（见根目录 `.gitignore`）。在 GPU 实例上训练前，在 **`$PROJECT`** 下按顺序执行下面三步。
+
+### A. 数据集目录与 JSON
+
+目标布局（与 `README`、`prepare_yolo_dataset.py` 一致）：
+
+- `dataset/mchar_train/`、`dataset/mchar_val/`、`dataset/mchar_test_a/`（PNG）
+- `dataset/mchar_train.json`、`dataset/mchar_val.json`
+
+**来源：** 在天池赛题页下载完整数据（README 顶部赛题链接），解压后把上述目录与文件拷到实例上的 **`$PROJECT/dataset/`**（可用 scp、rsync、平台「上传」、挂载网盘等）。
+
+若压缩包已在实例本机，示例（**解压结构因压缩包而异**，若多套一层目录请再 `mv` 对齐）：
+
+```bash
+cd "$PROJECT"
+mkdir -p dataset
+# unzip -q ~/downloads/mchar_xxx.zip -d dataset
+# 或：tar -xzf ~/downloads/mchar_xxx.tar.gz -C dataset
+```
+
+### B. 预训练权重 `*.pt`（项目根目录）
+
+```bash
+cd "$PROJECT"
+python download_yolo_weights.py
+# 只下流水线常用权重时可缩小范围，例如：
+# python download_yolo_weights.py yolo11m.pt yolo11l.pt yolo11x.pt
+```
+
+### C. 生成 `dataset/yolo/`（数据就位后执行一次）
+
+```bash
+cd "$PROJECT"
+python prepare_yolo_dataset.py
+```
+
+**自检（与下一节一致）：**
+
+```bash
+cd "$PROJECT"
+ls dataset/mchar_train 2>/dev/null | head -n 3
+test -f dataset/mchar_train.json && test -f dataset/mchar_val.json && echo "dataset json OK"
+test -f yolo11m.pt && echo "weights OK" || echo "缺少 yolo11m.pt，请再运行 download_yolo_weights.py"
+test -d dataset/yolo/images/train && echo "yolo layout OK" || echo "尚未 prepare_yolo_dataset，请运行上一节命令 C"
+```
+
+完成后再进入 **第 4 节** 做完整检查、**第 7 节** 开始训练。
+
+---
+
 ## 4. 数据与目录检查
 
-训练需要（与 `README` / `baseline.py` 一致）：
+若刚完成 **第 3.5 节**，本节用于复查。训练需要（与 `README` / `baseline.py` 一致）：
 
 - `dataset/mchar_train/`、`dataset/mchar_val/`、`dataset/mchar_test_a/`（PNG）
 - `dataset/mchar_train.json`、`dataset/mchar_val.json`
@@ -74,6 +136,8 @@ test -f dataset/mchar_train.json && echo "train json OK"
 
 ## 5. 生成 YOLO 格式数据（仅需一次）
 
+> **仅从 Git 克隆、且已在第 3.5 节执行过** `prepare_yolo_dataset.py` **时可跳过本节。**
+
 ```bash
 cd "$PROJECT"
 python prepare_yolo_dataset.py
@@ -84,6 +148,8 @@ python prepare_yolo_dataset.py
 ---
 
 ## 6. 下载预训练权重（推荐，减少在线拉取失败）
+
+> **仅从 Git 克隆、且已在第 3.5 节执行过** `download_yolo_weights.py` **时可跳过本节。**
 
 ```bash
 cd "$PROJECT"
