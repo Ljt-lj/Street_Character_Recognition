@@ -1,0 +1,15 @@
+# Competition / local data (do not push)
+dataset/
+
+# YOLO / Ultralytics weights (download with download_yolo_weights.py; GitHub limit 100 MB per file)
+*.pt
+
+# Training outputs
+runs/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env

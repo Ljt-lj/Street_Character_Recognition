@@ -1,0 +1,5 @@
+# Ultralytics YOLO (https://github.com/ultralytics/ultralytics)
+# Slow PyPI: pip install -r requirements-yolo.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
+ultralytics>=8.3.0
+tqdm>=4.65.0
+Pillow>=9.0.0

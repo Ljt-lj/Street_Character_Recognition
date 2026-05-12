@@ -1,0 +1,205 @@
+# 云上 GPU 训练 — Shell 命令汇总
+
+适用于 **Linux + GPU** 环境（如 ModelScope / PAI-DSW、AutoDL、远程服务器等）。在实例的 **Terminal**（JupyterLab → New → Terminal）中执行。
+
+以下用 **`PROJECT`** 表示项目根目录（含 `train_yolo.py`、`dataset/` 等）。请按实际上传路径修改，例如：
+
+```bash
+export PROJECT=~/Street_Character_Recognition
+cd "$PROJECT"
+```
+
+---
+
+## 0. 打开终端
+
+在 JupyterLab：**File → New → Terminal**，或 Launcher 里点 **Terminal**。
+
+---
+
+## 1. 确认 GPU 与 PyTorch
+
+```bash
+nvidia-smi
+
+python -c "import torch; print('torch', torch.__version__); print('cuda', torch.cuda.is_available()); print(torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'no gpu')"
+```
+
+第二行应出现 **`cuda True`** 和显卡名称。
+
+---
+
+## 2. 进入项目目录
+
+```bash
+export PROJECT=~/Street_Character_Recognition   # 改成你的路径
+cd "$PROJECT"
+pwd
+ls
+```
+
+---
+
+## 3. 安装 Python 依赖
+
+```bash
+cd "$PROJECT"
+pip install -U pip
+pip install -r requirements-yolo.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
+```
+
+若镜像已含 `ultralytics`，可跳过或仅执行 `pip install -r requirements-yolo.txt` 做补齐。
+
+---
+
+## 4. 数据与目录检查
+
+训练需要（与 `README` / `baseline.py` 一致）：
+
+- `dataset/mchar_train/`、`dataset/mchar_val/`、`dataset/mchar_test_a/`（PNG）
+- `dataset/mchar_train.json`、`dataset/mchar_val.json`
+- `svhn_digits.yaml`（仓库内已有）
+
+检查示例：
+
+```bash
+cd "$PROJECT"
+ls dataset/mchar_train  | head
+test -f dataset/mchar_train.json && echo "train json OK"
+```
+
+若数据在网盘/OSS，请先在平台内下载/挂载到上述相对路径。
+
+---
+
+## 5. 生成 YOLO 格式数据（仅需一次）
+
+```bash
+cd "$PROJECT"
+python prepare_yolo_dataset.py
+```
+
+生成 `dataset/yolo/images/{train,val}` 与 `labels/{train,val}`。
+
+---
+
+## 6. 下载预训练权重（推荐，减少在线拉取失败）
+
+```bash
+cd "$PROJECT"
+python download_yolo_weights.py
+# 或只下部分：
+# python download_yolo_weights.py yolo11m.pt yolo11l.pt yolo11x.pt
+```
+
+---
+
+## 7. 一键训练 + 验证集置信度搜索 + 自动换更大模型（推荐）
+
+在 **全量数据** 上训练，并在验证集上对 `conf` 搜索 **整串 Sequence accuracy**；若低于阈值会依次尝试更大 backbone（默认 `l`、`x`，见脚本参数）。
+
+```bash
+cd "$PROJECT"
+python run_yolo_gpu_pipeline.py \
+  --device auto \
+  --require-gpu \
+  --workers 8 \
+  --batch 16 \
+  --epochs 100
+```
+
+**显存不足（OOM）** 时减小 batch，例如：
+
+```bash
+python run_yolo_gpu_pipeline.py --require-gpu --workers 8 --batch 8 --epochs 100
+```
+
+**不训练最大模型 `x`（省显存/时间）：**
+
+```bash
+python run_yolo_gpu_pipeline.py --require-gpu --no-mega-upgrade
+```
+
+**快速冒烟（小数据、短 epoch，仅测流程）：**
+
+```bash
+python run_yolo_gpu_pipeline.py --quick --workers 4
+```
+
+**输出：** 终端末尾 JSON + 文件 **`runs/yolo_pipeline_summary.json`**  
+其中 **`best_weights`**、**`best_conf`**、**`best_sequence_accuracy`** 为全局最优。
+
+---
+
+## 8. 仅手动训练（不用流水线时）
+
+```bash
+cd "$PROJECT"
+python train_yolo.py --model yolo11m.pt --device auto --epochs 120 --batch 16 --workers 8
+```
+
+权重默认在：`runs/detect/mchar_digits/weights/best.pt`（若改过 `--name` 则目录名会变）。
+
+---
+
+## 9. 验证集整串准确率（与赛题口径一致）
+
+流水线结束后，用 `summary.json` 里的权重与 `conf`；或手动指定：
+
+```bash
+cd "$PROJECT"
+python eval_yolo_sequence.py \
+  --weights runs/detect/<你的run目录名>/weights/best.pt \
+  --conf 0.25 \
+  --device auto
+```
+
+将 `<你的run目录名>` 换成实际文件夹名；**`--conf`** 可与 `yolo_pipeline_summary.json` 中的 **`best_conf`** 对齐。
+
+---
+
+## 10. 测试集提交 CSV
+
+```bash
+cd "$PROJECT"
+python predict_yolo_submit.py \
+  --weights runs/detect/<你的run目录名>/weights/best.pt \
+  --conf 0.25 \
+  --out yolo_submit.csv \
+  --device auto
+```
+
+---
+
+## 11. 常用调参（可选）
+
+| 目的 | 示例 |
+|------|------|
+| 更大输入分辨率 | 在 `train_yolo.py` 中加 `--imgsz 800`（显存占用上升） |
+| 换更大 backbone | `--primary-model yolo11l.pt` 或流水线里已自动升级 |
+| 提高「继续训更大模型」的门槛 | `run_yolo_gpu_pipeline.py --min-acc 0.90` |
+| DataLoader  workers | Linux 一般可用 `8`；报错时试 `--workers 4` |
+
+---
+
+## 12. 与本机 Windows 的区别
+
+- 使用 **`/`** 路径，无 `C:\`。  
+- 不要用 **`run_yolo_full_gpu.bat`**（仅 Windows）；云上直接用 **`python run_yolo_gpu_pipeline.py ...`**。  
+- 必须在 **云实例 Terminal** 里执行；本机无 NVIDIA 时 `cuda` 会一直为 `False`。
+
+---
+
+## 13. 故障排查
+
+| 现象 | 处理 |
+|------|------|
+| `ModuleNotFoundError: ultralytics` | 执行第 3 节 `pip install -r requirements-yolo.txt` |
+| `Missing svhn_digits.yaml` / 无 `dataset/yolo` | 确认在 `$PROJECT` 根目录；先跑 `prepare_yolo_dataset.py` |
+| `Model weight not found` | 运行 `download_yolo_weights.py` 或上传 `.pt` 到项目根目录 |
+| CUDA OOM | 减小 `--batch`，或 `--no-mega-upgrade`，或换 `yolo11s.pt` |
+| `--require-gpu` 立即退出 | 当前 Python 未识别 GPU，检查 `nvidia-smi` 与 `torch.cuda.is_available()` |
+
+---
+
+*与仓库内 `METHOD.md`、`run_yolo_gpu_pipeline.py`、`train_yolo.py` 保持一致；参数以 `python <脚本>.py --help` 为准。*
