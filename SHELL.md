@@ -206,6 +206,36 @@ python train_yolo.py --model yolo11m.pt --device auto --epochs 120 --batch 16 --
 
 权重默认在：`runs/detect/mchar_digits/weights/best.pt`（若改过 `--name` 则目录名会变）。
 
+### 在旧 run 的 `best.pt` 上再训一轮（新实验名）
+
+用 **`--continue-from`** 指向上一阶段的 **`best.pt`**，并用 **`--name`** 新建子目录（避免与旧 run 混淆或覆盖）。**`--model` 在此模式下不使用**。
+
+```bash
+cd "$PROJECT"
+python train_yolo.py \
+  --continue-from runs/detect/<旧run目录名>/weights/best.pt \
+  --name mchar_r2 \
+  --device auto \
+  --epochs 80 \
+  --batch 16 \
+  --workers 8
+```
+
+新权重输出在：**`runs/detect/mchar_r2/weights/best.pt`**。
+
+### 同一 run 断点续训（`last.pt`）
+
+与中断前相同的 **`--project` / `--name`**，或写全路径：
+
+```bash
+python train_yolo.py --resume --device auto --batch 16 --workers 8
+# 或：python train_yolo.py --resume runs/detect/<你的run目录名>/weights/last.pt --device auto
+# 与下面等价（路径为 last.pt 时）：
+# python train_yolo.py --continue-from runs/detect/<你的run目录名>/weights/last.pt --device auto
+```
+
+**`--resume` 与 `--continue-from` 不要同时使用。**
+
 ---
 
 ## 9. 验证集整串准确率（与赛题口径一致）

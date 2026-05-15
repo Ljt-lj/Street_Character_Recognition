@@ -13,6 +13,10 @@ Usage:
   python train_yolo.py --model yolo11m.pt --epochs 120 --imgsz 640
   python train_yolo.py --device cpu          # force CPU
   python train_yolo.py --device 0            # first GPU
+  python train_yolo.py --resume              # same run: PROJECT/NAME/weights/last.pt
+  python train_yolo.py --resume runs/detect/<run>/weights/last.pt
+  python train_yolo.py --continue-from runs/detect/<run>/weights/last.pt   # same as --resume path
+  python train_yolo.py --continue-from runs/detect/<旧run>/weights/best.pt --name mchar_r2 --epochs 80
 """
 
 from __future__ import annotations
@@ -33,7 +37,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument(
         "--model",
         default="yolo11m.pt",
-        help="Checkpoint name or path (e.g. yolo11n.pt, yolo11m.pt, yolo11l.pt, yolov8m.pt).",
+        help="Checkpoint name or path. Ignored when --resume or when --continue-from points to last.pt.",
     )
     p.add_argument("--data", default=str(ROOT / "svhn_digits.yaml"), help="Dataset YAML.")
     p.add_argument("--epochs", type=int, default=120)
@@ -55,17 +59,111 @@ def parse_args() -> argparse.Namespace:
         default=1.0,
         help="Use a fraction of training images (e.g. 0.01) for quick CPU smoke tests.",
     )
+    p.add_argument(
+        "--resume",
+        nargs="?",
+        const="__auto__",
+        default=None,
+        metavar="LAST_PT",
+        help=(
+            "Resume same Ultralytics run from last.pt (optimizer + epoch). "
+            "Alone: --project/--name/weights/last.pt. Or pass path. Mutually exclusive with --continue-from."
+        ),
+    )
+    p.add_argument(
+        "--continue-from",
+        dest="continue_from",
+        default=None,
+        metavar="WEIGHTS",
+        help=(
+            "If path is last.pt: same as --resume (same run). "
+            "Otherwise (e.g. best.pt): load as pretrained weights and train a new run under --project/--name "
+            "(use a new --name, e.g. mchar_r2). Mutually exclusive with --resume."
+        ),
+    )
     return p.parse_args()
 
 
 def main() -> None:
     args = parse_args()
+    if args.resume is not None and args.continue_from is not None:
+        raise SystemExit("Use only one of --resume and --continue-from.")
+
     data_yaml = Path(args.data)
     if not data_yaml.is_file():
         raise SystemExit(f"Missing {data_yaml}. Run prepare_yolo_dataset.py first.")
 
     device = resolve_yolo_device(args.device)
     print(f"Using device: {device}")
+
+    last_path: Path | None = None
+
+    if args.continue_from is not None:
+        w = Path(args.continue_from).expanduser().resolve()
+        if not w.is_file():
+            raise SystemExit(f"--continue-from not found: {w}")
+        if w.name == "last.pt":
+            last_path = w
+        else:
+            print(f"Warm-start from weights: {w}")
+            model = YOLO(str(w))
+            train_kw = dict(
+                data=str(data_yaml),
+                epochs=args.epochs,
+                imgsz=args.imgsz,
+                patience=args.patience,
+                seed=args.seed,
+                workers=args.workers,
+                project=args.project,
+                name=args.name,
+                exist_ok=True,
+                verbose=True,
+                cos_lr=True,
+                warmup_epochs=3,
+                close_mosaic=10,
+                amp=not device_is_cpu(device),
+                fraction=args.fraction,
+                device=device,
+            )
+            if args.batch > 0:
+                train_kw["batch"] = args.batch
+            model.train(**train_kw)
+            best = Path(args.project) / args.name / "weights" / "best.pt"
+            print(f"Training finished. Best weights: {best}")
+            return
+
+    if args.resume is not None:
+        if args.resume == "__auto__":
+            last_path = Path(args.project) / args.name / "weights" / "last.pt"
+        else:
+            last_path = Path(args.resume).expanduser().resolve()
+
+    if last_path is not None:
+        if not last_path.is_file():
+            raise SystemExit(
+                f"Cannot resume: missing {last_path}\n"
+                "Use the same --project and --name as the interrupted run, or pass the full path to last.pt."
+            )
+        print(f"Resume from: {last_path}")
+        model = YOLO(str(last_path))
+        train_kw = dict(
+            resume=True,
+            data=str(data_yaml),
+            epochs=args.epochs,
+            imgsz=args.imgsz,
+            patience=args.patience,
+            workers=args.workers,
+            verbose=True,
+            amp=not device_is_cpu(device),
+            device=device,
+        )
+        if args.batch > 0:
+            train_kw["batch"] = args.batch
+        model.train(**train_kw)
+        run_root = last_path.parent.parent
+        best = run_root / "weights" / "best.pt"
+        print(f"Training finished. Best weights: {best}")
+        return
 
     model = YOLO(args.model)
     train_kw = dict(
