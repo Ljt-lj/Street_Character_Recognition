@@ -192,8 +192,35 @@ python run_yolo_gpu_pipeline.py --require-gpu --no-mega-upgrade
 python run_yolo_gpu_pipeline.py --quick --workers 4
 ```
 
+### 流水线 Stage 1 断点续训（`--resume-train`）
+
+Stage 1 训练中断或想**在同一 run 目录**里接着训时，指向该 run 的 **`weights/last.pt`**。续训完成后仍会执行 **验证集 conf 搜索**，并按阈值决定是否训练更大模型（`l` / `x`）。
+
+| 场景 | 命令 |
+|------|------|
+| **同一 run 续 epoch**（中断后继续） | `--resume-train runs/detect/<run>/weights/last.pt` |
+| **从旧 best 开新 run 再训**（新目录） | 不用 `--resume-train`；用 **`--primary-model runs/detect/<旧run>/weights/best.pt`**（会新建带时间戳的 run 名） |
+
+示例（将 `<run>` 换成 `runs/detect/` 下实际文件夹名）：
+
+```bash
+cd "$PROJECT"
+python run_yolo_gpu_pipeline.py \
+  --require-gpu \
+  --resume-train runs/detect/<run>/weights/last.pt \
+  --workers 8 \
+  --batch 16 \
+  --epochs 100
+```
+
+说明：
+
+- **`--epochs`** 为 Ultralytics **目标总 epoch**（从 checkpoint 接着涨到该值；若只想再多训 N 轮，设为 **已完成 epoch + N**）。
+- **`--resume-train` 与 `--quick` 不要一起用**（quick 会改 epoch/数据比例，与续训意图冲突）。
+- 仅续训、跳过 Stage 1 之后的 conf/升级时，请直接用 **§8** 的 `train_yolo.py --resume`。
+
 **输出：** 终端末尾 JSON + 文件 **`runs/yolo_pipeline_summary.json`**  
-其中 **`best_weights`**、**`best_conf`**、**`best_sequence_accuracy`** 为全局最优。
+其中 **`best_weights`**、**`best_conf`**、**`best_sequence_accuracy`** 为全局最优；若用了续训，JSON 里会有 **`resume_train`** 字段记录 `last.pt` 路径。
 
 ---
 
@@ -295,6 +322,8 @@ python predict_yolo_submit.py \
 | `Model weight not found` | 运行 `download_yolo_weights.py` 或上传 `.pt` 到项目根目录 |
 | CUDA OOM | 减小 `--batch`，或 `--no-mega-upgrade`，或换 `yolo11s.pt` |
 | `--require-gpu` 立即退出 | 当前 Python 未识别 GPU，检查 `nvidia-smi` 与 `torch.cuda.is_available()` |
+| 流水线接着上次训练 | **`--resume-train runs/detect/<run>/weights/last.pt`**（§7）；仅手动续训见 §8 **`train_yolo.py --resume`** |
+| `--resume-train` 报错找不到文件 | 确认路径为 **`last.pt`**（不是 `best.pt`）；中断后若从未保存过 checkpoint，需重新 Stage 1 |
 
 ---
 

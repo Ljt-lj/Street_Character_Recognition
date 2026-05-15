@@ -14,6 +14,9 @@ Quick smoke (tiny subset):
 Local CPU (full train possible but slow; recommended defaults):
   python run_yolo_gpu_pipeline.py --cpu-preset
 
+Resume Stage 1 from an interrupted run (same Ultralytics run via last.pt), then conf sweep / upgrades:
+  python run_yolo_gpu_pipeline.py --require-gpu --resume-train runs/detect/<run>/weights/last.pt
+
 Requires: prepare_yolo_dataset.py already run; ultralytics installed; local .pt weights.
 """
 
@@ -77,6 +80,13 @@ def parse_args() -> argparse.Namespace:
         default=0,
         help="If >0, cap validation images for conf sweep (default full val; quick uses 1000 unless overridden).",
     )
+    p.add_argument(
+        "--resume-train",
+        default=None,
+        metavar="LAST_PT",
+        help="Stage 1: resume primary training from weights/last.pt (same run as interrupted). "
+        "Then run val conf sweep and optional upgrade stages. --epochs is the target total epochs.",
+    )
     return p.parse_args()
 
 
@@ -102,8 +112,9 @@ def _try_resolve_model_path(s: str) -> str | None:
 
 def run_train(
     *,
-    model_path: str,
-    run_name: str,
+    model_path: str | None = None,
+    run_name: str | None = None,
+    resume_last: str | None = None,
     epochs: int,
     imgsz: int,
     batch: int,
@@ -112,6 +123,37 @@ def run_train(
     fraction: float,
     project: str,
 ) -> Path:
+    if resume_last:
+        last_p = Path(resume_last).expanduser().resolve()
+        if not last_p.is_file():
+            raise SystemExit(f"--resume-train file not found: {last_p}")
+        if last_p.name != "last.pt":
+            raise SystemExit(f"--resume-train must point to weights/last.pt, got: {last_p}")
+        cmd = [
+            sys.executable,
+            str(ROOT / "train_yolo.py"),
+            "--resume",
+            str(last_p),
+            "--epochs",
+            str(epochs),
+            "--imgsz",
+            str(imgsz),
+            "--device",
+            device,
+            "--workers",
+            str(workers),
+        ]
+        if batch != 0:
+            cmd.extend(["--batch", str(batch)])
+        print("Running:", " ".join(cmd))
+        subprocess.check_call(cmd, cwd=str(ROOT))
+        best = last_p.parent / "best.pt"
+        if not best.is_file():
+            raise SystemExit(f"Missing best.pt after resume train: {best}")
+        return best
+
+    if not model_path or not run_name:
+        raise SystemExit("run_train: need model_path and run_name when not using resume_last.")
     cmd = [
         sys.executable,
         str(ROOT / "train_yolo.py"),
@@ -193,20 +235,39 @@ def main() -> None:
     stamp = datetime.now().strftime("%m%d_%H%M")
     primary_path = _resolve_model_path(args.primary_model)
     stem = Path(primary_path).stem.replace(".", "_")
-    run_primary = f"{stem}_{stamp}"
 
-    print("\n=== Stage 1: train primary ===\n")
-    best_primary = run_train(
-        model_path=primary_path,
-        run_name=run_primary,
-        epochs=args.epochs,
-        imgsz=args.imgsz,
-        batch=args.batch,
-        device=args.device,
-        workers=args.workers,
-        fraction=args.fraction,
-        project=args.project,
-    )
+    if args.resume_train:
+        last_p = Path(args.resume_train).expanduser().resolve()
+        if not last_p.is_file():
+            raise SystemExit(f"--resume-train not found: {last_p}")
+        if last_p.name != "last.pt":
+            raise SystemExit(f"--resume-train must be weights/last.pt, got: {last_p}")
+        run_primary = last_p.parent.parent.name
+        print("\n=== Stage 1: resume primary (from last.pt) ===\n")
+        best_primary = run_train(
+            resume_last=str(last_p),
+            epochs=args.epochs,
+            imgsz=args.imgsz,
+            batch=args.batch,
+            device=args.device,
+            workers=args.workers,
+            fraction=args.fraction,
+            project=args.project,
+        )
+    else:
+        run_primary = f"{stem}_{stamp}"
+        print("\n=== Stage 1: train primary ===\n")
+        best_primary = run_train(
+            model_path=primary_path,
+            run_name=run_primary,
+            epochs=args.epochs,
+            imgsz=args.imgsz,
+            batch=args.batch,
+            device=args.device,
+            workers=args.workers,
+            fraction=args.fraction,
+            project=args.project,
+        )
 
     print("\n=== Stage 2: confidence sweep (primary) ===\n")
     acc_p, conf_p, table_p = sweep_confidence(
@@ -324,6 +385,7 @@ def main() -> None:
         "best_sequence_accuracy": round(best_acc, 6),
         "primary_run": run_primary,
         "primary_weights": str(best_primary),
+        "resume_train": str(Path(args.resume_train).resolve()) if args.resume_train else None,
         "primary_best_conf": conf_p,
         "primary_best_acc": round(acc_p, 6),
         "upgrade_run": upgrade_run,
