@@ -17,6 +17,7 @@ Usage:
   python train_yolo.py --resume runs/detect/<run>/weights/last.pt
   python train_yolo.py --continue-from runs/detect/<run>/weights/last.pt   # same as --resume path
   python train_yolo.py --continue-from runs/detect/<旧run>/weights/best.pt --name mchar_r2 --epochs 80
+  python train_yolo.py --cheat --model yolo11m.pt --device 0   # train+val in training split (leakage)
 """
 
 from __future__ import annotations
@@ -30,6 +31,7 @@ from yolo_device import device_is_cpu, resolve_yolo_device
 
 
 ROOT = Path(__file__).resolve().parent
+CHEAT_YAML = ROOT / "svhn_digits_cheat.yaml"
 
 
 def parse_args() -> argparse.Namespace:
@@ -81,7 +83,29 @@ def parse_args() -> argparse.Namespace:
             "(use a new --name, e.g. mchar_r2). Mutually exclusive with --resume."
         ),
     )
+    p.add_argument(
+        "--cheat",
+        action="store_true",
+        help="Use svhn_digits_cheat.yaml: training split includes val images (severe label leakage). "
+        "For informal experiments only; invalid for fair val/test reporting.",
+    )
     return p.parse_args()
+
+
+def _resolve_data_yaml(args: argparse.Namespace) -> Path:
+    if args.cheat:
+        if not CHEAT_YAML.is_file():
+            raise SystemExit(f"Missing {CHEAT_YAML}. It should ship with the repo next to svhn_digits.yaml.")
+        print(
+            "\n*** CHEAT MODE ***\n"
+            "Training data includes BOTH mchar_train and mchar_val images (see svhn_digits_cheat.yaml).\n"
+            "Validation-set metrics and eval_yolo_sequence on val are NOT fair — do not report as clean scores.\n"
+        )
+        return CHEAT_YAML
+    data_yaml = Path(args.data)
+    if not data_yaml.is_file():
+        raise SystemExit(f"Missing {data_yaml}. Run prepare_yolo_dataset.py first.")
+    return data_yaml
 
 
 def main() -> None:
@@ -89,12 +113,11 @@ def main() -> None:
     if args.resume is not None and args.continue_from is not None:
         raise SystemExit("Use only one of --resume and --continue-from.")
 
-    data_yaml = Path(args.data)
-    if not data_yaml.is_file():
-        raise SystemExit(f"Missing {data_yaml}. Run prepare_yolo_dataset.py first.")
+    data_yaml = _resolve_data_yaml(args)
 
     device = resolve_yolo_device(args.device)
     print(f"Using device: {device}")
+    print(f"Dataset YAML: {data_yaml}")
 
     last_path: Path | None = None
 

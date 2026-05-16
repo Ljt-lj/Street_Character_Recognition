@@ -1,0 +1,21 @@
+# CHEAT: train split = official train + val images (label leakage). Not for fair benchmarks.
+# Run: python prepare_yolo_dataset.py first.
+
+path: dataset/yolo
+train:
+  - images/train
+  - images/val
+val: images/val
+
+nc: 10
+names:
+  0: "0"
+  1: "1"
+  2: "2"
+  3: "3"
+  4: "4"
+  5: "5"
+  6: "6"
+  7: "7"
+  8: "8"
+  9: "9"

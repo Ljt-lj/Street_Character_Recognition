@@ -219,9 +219,13 @@ python baseline.py
 
 ---
 
-### 4.7 配置文件 `svhn_digits.yaml`
+### 4.7 配置文件 `svhn_digits.yaml` 与 **`svhn_digits_cheat.yaml`（作弊训练）**
 
-**作用**：告诉 Ultralytics 数据集根目录与类别数、类别名。一般无需改；若数据放在其他盘符，可修改其中 `path:` 为绝对路径或调整相对路径。
+**`svhn_digits.yaml`**：正常训练，`train` / `val` 互不重叠。一般无需改；若数据放在其他盘符，可修改其中 `path:` 为绝对路径或调整相对路径。
+
+**`svhn_digits_cheat.yaml`**：`train` 同时包含 `images/train` 与 **`images/val`**（验证集图像参与梯度更新）；`val` 仍为 `images/val` 供 Ultralytics 每 epoch 验证。**验证集整串准确率、流水线里的 conf 搜索分数会严重偏高**，不能当作真实泛化能力，仅适合本地实验。
+
+- 使用方式：`python train_yolo.py --cheat ...` 或流水线 **`--cheat-train`**（见 `SHELL.md`）。
 
 ---
 
@@ -276,6 +280,7 @@ python baseline.py
 | `WinError 5` / 文件被占用 | 关闭预览、杀毒实时扫描或其它占用 `*.pt` 的进程后再 `--force` 下载 |
 | Windows 上 DataLoader 报错 | `train_yolo.py --workers 0` |
 | 训练很快但整串 Acc 低 | 检查 `prepare_yolo_dataset.py` 是否已重新跑过；提高 `imgsz` 或换更大 `--model`；调 `--conf` |
+| 使用 **`--cheat` / `--cheat-train`** | 验证集已参与训练，**勿**把 `eval_yolo_sequence` 或流水线 val 分数当真实 Acc；正式对比请用默认 `svhn_digits.yaml` |
 | CUDA 不可用 | 检查 PyTorch 是否为 CUDA 构建；`--device cpu` 仍可跑通全流程 |
 
 ---

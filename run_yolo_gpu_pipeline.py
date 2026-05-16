@@ -17,6 +17,9 @@ Local CPU (full train possible but slow; recommended defaults):
 Resume Stage 1 from an interrupted run (same Ultralytics run via last.pt), then conf sweep / upgrades:
   python run_yolo_gpu_pipeline.py --require-gpu --resume-train runs/detect/<run>/weights/last.pt
 
+Cheat / data leakage (train split includes val images — not for fair reporting):
+  python run_yolo_gpu_pipeline.py --require-gpu --cheat-train
+
 Requires: prepare_yolo_dataset.py already run; ultralytics installed; local .pt weights.
 """
 
@@ -87,6 +90,11 @@ def parse_args() -> argparse.Namespace:
         help="Stage 1: resume primary training from weights/last.pt (same run as interrupted). "
         "Then run val conf sweep and optional upgrade stages. --epochs is the target total epochs.",
     )
+    p.add_argument(
+        "--cheat-train",
+        action="store_true",
+        help="Stage 1+: pass --cheat to train_yolo.py (train+val in training split; val metrics & val seq acc are biased).",
+    )
     return p.parse_args()
 
 
@@ -115,6 +123,7 @@ def run_train(
     model_path: str | None = None,
     run_name: str | None = None,
     resume_last: str | None = None,
+    cheat: bool = False,
     epochs: int,
     imgsz: int,
     batch: int,
@@ -143,6 +152,8 @@ def run_train(
             "--workers",
             str(workers),
         ]
+        if cheat:
+            cmd.append("--cheat")
         if batch != 0:
             cmd.extend(["--batch", str(batch)])
         print("Running:", " ".join(cmd))
@@ -174,6 +185,8 @@ def run_train(
         "--project",
         project,
     ]
+    if cheat:
+        cmd.append("--cheat")
     if batch != 0:
         cmd.extend(["--batch", str(batch)])
     print("Running:", " ".join(cmd))
@@ -228,6 +241,13 @@ def main() -> None:
     device = resolve_yolo_device(args.device)
     print(f"Device resolved: {device}")
 
+    if args.cheat_train:
+        print(
+            "\n*** PIPELINE CHEAT MODE (--cheat-train) ***\n"
+            "All YOLO training stages use train+val in the training split (svhn_digits_cheat.yaml).\n"
+            "Sequence accuracy from conf sweep on mchar_val is NOT a fair validation metric.\n"
+        )
+
     marks = json.loads(Path(args.val_json).read_text(encoding="utf-8"))
     img_root = Path(args.val_img)
     confs = [float(x.strip()) for x in args.conf_sweep.split(",") if x.strip()]
@@ -246,6 +266,7 @@ def main() -> None:
         print("\n=== Stage 1: resume primary (from last.pt) ===\n")
         best_primary = run_train(
             resume_last=str(last_p),
+            cheat=args.cheat_train,
             epochs=args.epochs,
             imgsz=args.imgsz,
             batch=args.batch,
@@ -260,6 +281,7 @@ def main() -> None:
         best_primary = run_train(
             model_path=primary_path,
             run_name=run_primary,
+            cheat=args.cheat_train,
             epochs=args.epochs,
             imgsz=args.imgsz,
             batch=args.batch,
@@ -303,6 +325,7 @@ def main() -> None:
             best_upgrade = run_train(
                 model_path=up_path,
                 run_name=run_u,
+                cheat=args.cheat_train,
                 epochs=args.epochs,
                 imgsz=args.imgsz,
                 batch=max(1, args.batch // 2) if args.batch > 0 else args.batch,
@@ -352,6 +375,7 @@ def main() -> None:
             best_mega = run_train(
                 model_path=mega_path,
                 run_name=run_m,
+                cheat=args.cheat_train,
                 epochs=args.epochs,
                 imgsz=args.imgsz,
                 batch=mega_batch,
@@ -386,6 +410,7 @@ def main() -> None:
         "primary_run": run_primary,
         "primary_weights": str(best_primary),
         "resume_train": str(Path(args.resume_train).resolve()) if args.resume_train else None,
+        "cheat_train": bool(args.cheat_train),
         "primary_best_conf": conf_p,
         "primary_best_acc": round(acc_p, 6),
         "upgrade_run": upgrade_run,
