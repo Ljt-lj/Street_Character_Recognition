@@ -128,6 +128,9 @@ python train_yolo.py --continue-from runs/detect/<旧run>/weights/best.pt --name
 
 # 同一 run 断点续训（last.pt）
 python train_yolo.py --resume runs/detect/<run>/weights/last.pt --device 0
+
+# 作弊训练（train+val 进训练集；验证指标不可信）
+python train_yolo.py --cheat --model yolo11m.pt --device auto --epochs 100 --batch 16
 ```
 
 **参数说明**：
@@ -137,7 +140,8 @@ python train_yolo.py --resume runs/detect/<run>/weights/last.pt --device 0
 | `--model` | `yolo11m.pt` | 预训练权重；**`--continue-from` 为非 last.pt 时忽略**；**`--resume` / last.pt 的 continue-from 时忽略** |
 | `--resume` | 无 | 不写路径则读 `--project`/`--name`/weights/last.pt；与 **`--continue-from` 二选一** |
 | `--continue-from` | 无 | **`.../last.pt`**：同 `--resume`；**`.../best.pt` 等**：作初始权重新训，建议配合新 **`--name`** |
-| `--data` | `svhn_digits.yaml` | 数据集 YAML |
+| `--cheat` | 否 | 使用 **`svhn_digits_cheat.yaml`**（训练集含 val 图，数据泄漏；勿当公平指标） |
+| `--data` | `svhn_digits.yaml` | 数据集 YAML（**`--cheat` 时忽略，固定用 cheat yaml**） |
 | `--epochs` | `120` | 训练轮数 |
 | `--imgsz` | `640` | 训练输入边长 |
 | `--batch` | `16` | 批大小；设为 **-1** 时交给 Ultralytics 自动 batch |
