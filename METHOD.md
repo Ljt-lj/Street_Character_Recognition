@@ -230,6 +230,7 @@ python baseline.py
 **`svhn_digits_cheat.yaml`**：`train` 同时包含 `images/train` 与 **`images/val`**（验证集图像参与梯度更新）；`val` 仍为 `images/val` 供 Ultralytics 每 epoch 验证。**验证集整串准确率、流水线里的 conf 搜索分数会严重偏高**，不能当作真实泛化能力，仅适合本地实验。
 
 - 使用方式：`python train_yolo.py --cheat ...` 或流水线 **`--cheat-train`**（见 `SHELL.md`）。
+- **`--cheat` 训练结束后**：除 **`runs/detect/<name>/weights/`** 下的主文件外，会在 **`runs/cheat_weights/<run名>_<时间戳>/`** 再保存 **`best.pt` / `last.pt`** 的副本（见 `train_yolo.py` 内 `_export_cheat_weights_copy`）。
 
 ---
 

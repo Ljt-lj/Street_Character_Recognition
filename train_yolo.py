@@ -17,12 +17,14 @@ Usage:
   python train_yolo.py --resume runs/detect/<run>/weights/last.pt
   python train_yolo.py --continue-from runs/detect/<run>/weights/last.pt   # same as --resume path
   python train_yolo.py --continue-from runs/detect/<旧run>/weights/best.pt --name mchar_r2 --epochs 80
-  python train_yolo.py --cheat --model yolo11m.pt --device 0   # train+val in training split (leakage)
+  python train_yolo.py --cheat --model yolo11m.pt --device 0   # + copy under runs/cheat_weights/...
 """
 
 from __future__ import annotations
 
 import argparse
+import shutil
+from datetime import datetime
 from pathlib import Path
 
 from ultralytics import YOLO
@@ -32,6 +34,38 @@ from yolo_device import device_is_cpu, resolve_yolo_device
 
 ROOT = Path(__file__).resolve().parent
 CHEAT_YAML = ROOT / "svhn_digits_cheat.yaml"
+CHEAT_EXPORT_ROOT = ROOT / "runs" / "cheat_weights"
+
+
+def _export_cheat_weights_copy(weights_dir: Path) -> Path | None:
+    """After cheat-mode training, duplicate best.pt / last.pt under runs/cheat_weights/..."""
+    if not weights_dir.is_dir():
+        return None
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    run_label = weights_dir.parent.name
+    dest = CHEAT_EXPORT_ROOT / f"{run_label}_{stamp}"
+    dest.mkdir(parents=True, exist_ok=True)
+    copied = False
+    for fn in ("best.pt", "last.pt"):
+        src = weights_dir / fn
+        if src.is_file():
+            shutil.copy2(src, dest / fn)
+            copied = True
+    if not copied:
+        return None
+    readme = dest / "README.txt"
+    readme.write_text(
+        "Cheat-mode weight export (copy). Ultralytics primary files remain in:\n"
+        f"  {weights_dir.resolve()}\n",
+        encoding="utf-8",
+    )
+    print(f"Cheat mode: extra weight copy at {dest}")
+    return dest
+
+
+def _maybe_export_cheat(args: argparse.Namespace, weights_dir: Path) -> None:
+    if args.cheat:
+        _export_cheat_weights_copy(weights_dir)
 
 
 def parse_args() -> argparse.Namespace:
@@ -87,7 +121,8 @@ def parse_args() -> argparse.Namespace:
         "--cheat",
         action="store_true",
         help="Use svhn_digits_cheat.yaml: training split includes val images (severe label leakage). "
-        "For informal experiments only; invalid for fair val/test reporting.",
+        "For informal experiments only; invalid for fair val/test reporting. "
+        "After training, best.pt/last.pt are also copied under runs/cheat_weights/<run>_<timestamp>/.",
     )
     return p.parse_args()
 
@@ -151,7 +186,9 @@ def main() -> None:
             if args.batch > 0:
                 train_kw["batch"] = args.batch
             model.train(**train_kw)
-            best = Path(args.project) / args.name / "weights" / "best.pt"
+            weights_dir = Path(args.project) / args.name / "weights"
+            best = weights_dir / "best.pt"
+            _maybe_export_cheat(args, weights_dir)
             print(f"Training finished. Best weights: {best}")
             return
 
@@ -184,7 +221,9 @@ def main() -> None:
             train_kw["batch"] = args.batch
         model.train(**train_kw)
         run_root = last_path.parent.parent
-        best = run_root / "weights" / "best.pt"
+        weights_dir = run_root / "weights"
+        best = weights_dir / "best.pt"
+        _maybe_export_cheat(args, weights_dir)
         print(f"Training finished. Best weights: {best}")
         return
 
@@ -211,7 +250,9 @@ def main() -> None:
         train_kw["batch"] = args.batch
 
     model.train(**train_kw)
-    best = Path(args.project) / args.name / "weights" / "best.pt"
+    weights_dir = Path(args.project) / args.name / "weights"
+    best = weights_dir / "best.pt"
+    _maybe_export_cheat(args, weights_dir)
     print(f"Training finished. Best weights: {best}")
 
 

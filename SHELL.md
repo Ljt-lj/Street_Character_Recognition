@@ -225,6 +225,8 @@ python run_yolo_gpu_pipeline.py \
 
 Stage 1 / 升级 / mega 各阶段调用 `train_yolo.py` 时均会带上 **`--cheat`**。`yolo_pipeline_summary.json` 中会有 **`"cheat_train": true`**。
 
+权重保存位置与平时相同（**`runs/detect/<run>/weights/best.pt`** 等）；此外每一阶段 `train_yolo.py` 结束时会**再复制一份**到 **`runs/cheat_weights/<run目录名>_<时间戳>/`**（内含 `best.pt`、`last.pt` 若存在，及 `README.txt`）。
+
 ```bash
 cd "$PROJECT"
 python run_yolo_gpu_pipeline.py \
@@ -287,6 +289,8 @@ python train_yolo.py --resume --device auto --batch 16 --workers 8
 cd "$PROJECT"
 python train_yolo.py --cheat --model yolo11m.pt --device auto --epochs 100 --batch 16 --workers 8
 ```
+
+Ultralytics 主权重仍在 **`runs/detect/<--name>/weights/`**；**`--cheat` 时额外备份**：**`runs/cheat_weights/<run名>_<YYYYMMDD_HHMMSS>/best.pt`**（及 `last.pt`、`README.txt`）。终端会打印 **`Cheat mode: extra weight copy at ...`**。
 
 ---
 
