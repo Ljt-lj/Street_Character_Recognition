@@ -128,9 +128,6 @@ python train_yolo.py --continue-from runs/detect/<旧run>/weights/best.pt --name
 
 # 同一 run 断点续训（last.pt）
 python train_yolo.py --resume runs/detect/<run>/weights/last.pt --device 0
-
-# 作弊训练（train+val 进训练集；验证指标不可信）
-python train_yolo.py --cheat --model yolo11m.pt --device auto --epochs 100 --batch 16
 ```
 
 **参数说明**：
@@ -140,8 +137,7 @@ python train_yolo.py --cheat --model yolo11m.pt --device auto --epochs 100 --bat
 | `--model` | `yolo11m.pt` | 预训练权重；**`--continue-from` 为非 last.pt 时忽略**；**`--resume` / last.pt 的 continue-from 时忽略** |
 | `--resume` | 无 | 不写路径则读 `--project`/`--name`/weights/last.pt；与 **`--continue-from` 二选一** |
 | `--continue-from` | 无 | **`.../last.pt`**：同 `--resume`；**`.../best.pt` 等**：作初始权重新训，建议配合新 **`--name`** |
-| `--cheat` | 否 | 使用 **`svhn_digits_cheat.yaml`**（训练集含 val 图，数据泄漏；勿当公平指标） |
-| `--data` | `svhn_digits.yaml` | 数据集 YAML（**`--cheat` 时忽略，固定用 cheat yaml**） |
+| `--data` | `svhn_digits.yaml` | 数据集 YAML |
 | `--epochs` | `120` | 训练轮数 |
 | `--imgsz` | `640` | 训练输入边长 |
 | `--batch` | `16` | 批大小；设为 **-1** 时交给 Ultralytics 自动 batch |
@@ -223,14 +219,9 @@ python baseline.py
 
 ---
 
-### 4.7 配置文件 `svhn_digits.yaml` 与 **`svhn_digits_cheat.yaml`（作弊训练）**
+### 4.7 配置文件 `svhn_digits.yaml`
 
-**`svhn_digits.yaml`**：正常训练，`train` / `val` 互不重叠。一般无需改；若数据放在其他盘符，可修改其中 `path:` 为绝对路径或调整相对路径。
-
-**`svhn_digits_cheat.yaml`**：`train` 同时包含 `images/train` 与 **`images/val`**（验证集图像参与梯度更新）；`val` 仍为 `images/val` 供 Ultralytics 每 epoch 验证。**验证集整串准确率、流水线里的 conf 搜索分数会严重偏高**，不能当作真实泛化能力，仅适合本地实验。
-
-- 使用方式：`python train_yolo.py --cheat ...` 或流水线 **`--cheat-train`**（见 `SHELL.md`）。
-- **`--cheat` 训练结束后**：除 **`runs/detect/<name>/weights/`** 下的主文件外，会在 **`runs/cheat_weights/<run名>_<时间戳>/`** 再保存 **`best.pt` / `last.pt`** 的副本（见 `train_yolo.py` 内 `_export_cheat_weights_copy`）。
+**作用**：告诉 Ultralytics 数据集根目录与类别数、类别名。`train` / `val` 互不重叠。一般无需改；若数据放在其他盘符，可修改其中 `path:` 为绝对路径或调整相对路径。
 
 ---
 
@@ -285,7 +276,6 @@ python baseline.py
 | `WinError 5` / 文件被占用 | 关闭预览、杀毒实时扫描或其它占用 `*.pt` 的进程后再 `--force` 下载 |
 | Windows 上 DataLoader 报错 | `train_yolo.py --workers 0` |
 | 训练很快但整串 Acc 低 | 检查 `prepare_yolo_dataset.py` 是否已重新跑过；提高 `imgsz` 或换更大 `--model`；调 `--conf` |
-| 使用 **`--cheat` / `--cheat-train`** | 验证集已参与训练，**勿**把 `eval_yolo_sequence` 或流水线 val 分数当真实 Acc；正式对比请用默认 `svhn_digits.yaml` |
 | CUDA 不可用 | 检查 PyTorch 是否为 CUDA 构建；`--device cpu` 仍可跑通全流程 |
 
 ---

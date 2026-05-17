@@ -221,26 +221,8 @@ python run_yolo_gpu_pipeline.py \
 - `**--resume-train` 与 `--quick` 不要一起用**（quick 会改 epoch/数据比例，与续训意图冲突）。
 - 仅续训、跳过 Stage 1 之后的 conf/升级时，请直接用 **§8** 的 `train_yolo.py --resume`。
 
-### 流水线「作弊训练」（`--cheat-train`）
-
-使用仓库内 `**svhn_digits_cheat.yaml`**：`train` 同时包含 `**images/train**` 与 `**images/val**`，验证集图像参与梯度更新。**流水线里对 `mchar_val` 的整串准确率与 conf 搜索会严重偏高**，不能当真实泛化或赛题公平分数；**测试集无标签**，作弊与否不改变测试集本身，但作业/报告若要求诚实汇报，须明确写明数据使用方式。
-
-Stage 1 / 升级 / mega 各阶段调用 `train_yolo.py` 时均会带上 `**--cheat`**。`yolo_pipeline_summary.json` 中会有 `**"cheat_train": true**`。
-
-权重保存位置与平时相同（`**runs/detect/<run>/weights/best.pt**` 等）；此外每一阶段 `train_yolo.py` 结束时会**再复制一份**到 `**runs/cheat_weights/<run目录名>_<时间戳>/`**（内含 `best.pt`、`last.pt` 若存在，及 `README.txt`）。
-
-```bash
-cd "$PROJECT"
-python run_yolo_gpu_pipeline.py \
-  --require-gpu \
-  --cheat-train \
-  --workers 8 \
-  --batch 16 \
-  --epochs 100
-```
-
-**输出：** 终端末尾 JSON + 文件 `**runs/yolo_pipeline_summary.json`**  
-其中 `**best_weights**`、`**best_conf**`、`**best_sequence_accuracy**` 为全局最优；若用了续训，JSON 里会有 `**resume_train**` 字段记录 `last.pt` 路径。
+**输出：** 终端末尾 JSON + 文件 **`runs/yolo_pipeline_summary.json`**  
+其中 **`best_weights`**、**`best_conf`**、**`best_sequence_accuracy`** 为全局最优；若用了续训，JSON 里会有 **`resume_train`** 字段记录 `last.pt` 路径。
 
 ---
 
@@ -345,9 +327,8 @@ python predict_yolo_submit.py \
 | `Model weight not found`                      | 运行 `download_yolo_weights.py` 或上传 `.pt` 到项目根目录                                                    |
 | CUDA OOM                                      | 减小 `--batch`，或 `--no-mega-upgrade`，或换 `yolo11s.pt`                                                |
 | `--require-gpu` 立即退出                          | 当前 Python 未识别 GPU，检查 `nvidia-smi` 与 `torch.cuda.is_available()`                                   |
-| 流水线接着上次训练                                     | `**--resume-train runs/detect/<run>/weights/last.pt`**（§7）；仅手动续训见 §8 `**train_yolo.py --resume**` |
-| `**--cheat` / `--cheat-train**`               | 验证集已进训练集，**勿**把 val 整串 Acc 当真实分数；见 §7 / §8                                                        |
-| `--resume-train` 报错找不到文件                      | 确认路径为 `**last.pt`**（不是 `best.pt`）；中断后若从未保存过 checkpoint，需重新 Stage 1                                |
+| 流水线接着上次训练                                     | **`--resume-train runs/detect/<run>/weights/last.pt`**（§7）；仅手动续训见 §8 **`train_yolo.py --resume`** |
+| `--resume-train` 报错找不到文件                      | 确认路径为 **`last.pt`**（不是 `best.pt`）；中断后若从未保存过 checkpoint，需重新 Stage 1                                |
 
 
 ---
