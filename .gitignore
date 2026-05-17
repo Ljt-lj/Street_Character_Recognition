@@ -2,7 +2,7 @@
 dataset/
 
 # YOLO / Ultralytics weights (download with download_yolo_weights.py; GitHub limit 100 MB per file)
-*.pt
+#*.pt
 
 # Training outputs
 # Python
